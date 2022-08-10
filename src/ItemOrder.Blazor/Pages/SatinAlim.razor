@@ -1,0 +1,232 @@
+﻿@page "/SatinAlim"
+@using Volo.Abp.Application.Dtos
+@using ItemOrder.Items
+@using ItemOrder.Localization
+@using Microsoft.Extensions.Localization
+@using Volo.Abp.AspNetCore.Components.Web
+@using ItemOrder.Permissions;
+@inject IStringLocalizer<ItemOrderResource> L
+@inject AbpBlazorMessageLocalizerHelper<ItemOrderResource> LH
+@inject IAuthorizationService AuthorizationService
+@inherits AbpCrudPageBase<IItemAppService, ItemDto, Guid, PagedAndSortedResultRequestDto, CreateUpdateItemDto>
+
+<Card>
+    <CardHeader>
+        <Row Class="justify-content-between">
+            <Column ColumnSize="ColumnSize.IsAuto">
+                <h2>@L["Menu:Items"]</h2>
+            </Column>
+            <Column ColumnSize="ColumnSize.IsAuto">
+                @if (CanCreate)
+                {
+                    <Button Color="Color.Primary" Clicked="OpenCreateModalAsync">@L["NewItem"]</Button>
+                }
+            </Column>
+        </Row>
+    </CardHeader>
+    <CardBody>
+        <DataGrid TItem="ItemDto"
+                  Data="Entities"
+                  ReadData="OnDataGridReadAsync"
+                  CurrentPage="CurrentPage"
+                  TotalItems="TotalCount"
+                  ShowPager="true"
+                  PageSize="PageSize">
+            <DataGridColumns>
+                <DataGridEntityActionsColumn TItem="ItemDto" @ref="@EntityActionsColumn">
+                    <DisplayTemplate>
+                        <EntityActions TItem="ItemDto" EntityActionsColumn="@EntityActionsColumn">
+                            <EntityAction TItem="ItemDto" Visible="@CanEdit"
+                                        Text="@L["Edit"]" 
+                                        Clicked="() => OpenEditModalAsync(context)" />
+                            <EntityAction TItem="ItemDto" Visible="@CanDelete"
+                                            Text="@L["Delete"]"
+                                            Clicked="() => DeleteEntityAsync(context)"
+                                            ConfirmationMessage="()=>GetDeleteConfirmationMessage(context)" />
+                        </EntityActions>
+                    </DisplayTemplate>
+                </DataGridEntityActionsColumn>
+                <DataGridColumn TItem="ItemDto"
+                                Field="@nameof(ItemDto.Name)"
+                                Caption="@L["Name"]"></DataGridColumn>
+                <DataGridColumn TItem="ItemDto"
+                                Field="@nameof(ItemDto.Type)"
+                                Caption="@L["Type"]">
+                    <DisplayTemplate>
+                        @L[$"Enum:ItemType.{Enum.GetName(context.Type)}"]
+                    </DisplayTemplate>
+                </DataGridColumn>
+                <DataGridColumn TItem="ItemDto"
+                                Field="@nameof(ItemDto.DueDate)"
+                                Caption="@L["DueDate"]">
+                    <DisplayTemplate>
+                        @context.DueDate.ToShortDateString()
+                    </DisplayTemplate>
+                </DataGridColumn>
+                <DataGridColumn TItem="ItemDto"
+                                Field="@nameof(ItemDto.PriceRange)"
+                                Caption="@L["PriceRange"]">
+                </DataGridColumn>
+                <DataGridColumn TItem="ItemDto"
+                                Field="@nameof(ItemDto.CreationTime)"
+                                Caption="@L["CreationTime"]">
+                    <DisplayTemplate>
+                        @context.CreationTime.ToLongDateString()
+                    </DisplayTemplate>
+                </DataGridColumn>
+                <DataGridColumn TItem="ItemDto"
+                                Field="@nameof(ItemDto.State)"
+                                Caption="@L["State"]">
+                    <DisplayTemplate>
+                        @L[$"Enum:OrderState.{Enum.GetName(context.State)}"]
+                    </DisplayTemplate>
+                </DataGridColumn>
+            </DataGridColumns>
+        </DataGrid>
+    </CardBody>
+</Card>
+
+<Modal @ref="@CreateModal">
+    <ModalBackdrop />
+    <ModalContent IsCentered="true">
+        <Form>
+            <ModalHeader>
+                <ModalTitle>@L["NewItem"]</ModalTitle>
+                <CloseButton Clicked="CloseCreateModalAsync"/>
+            </ModalHeader>
+            <ModalBody>
+                <Validations @ref="@CreateValidationsRef" Model="@NewEntity" ValidateOnLoad="false">
+                    <Validation MessageLocalizer="@LH.Localize">
+                        <Field>
+                            <FieldLabel>@L["Name"]</FieldLabel>
+                            <TextEdit @bind-Text="@NewEntity.Name">
+                                <Feedback>
+                                    <ValidationError/>
+                                </Feedback>
+                            </TextEdit>
+                        </Field>
+                    </Validation>
+                    <Field>
+                        <FieldLabel>@L["Type"]</FieldLabel>
+                        <Select TValue="ItemType" @bind-SelectedValue="@NewEntity.Type">
+                            @foreach (int itemTypeValue in Enum.GetValues(typeof(ItemType)))
+                            {
+                                <SelectItem TValue="ItemType" Value="@((ItemType) itemTypeValue)">
+                                    @L[$"Enum:ItemType.{Enum.GetName((ItemType)itemTypeValue)}"]
+                                </SelectItem>
+                            }
+                        </Select>
+                    </Field>
+                    <Field>
+                        <FieldLabel>@L["DueDate"]</FieldLabel>
+                        <DateEdit TValue="DateTime" @bind-Date="NewEntity.DueDate"/>
+                    </Field>
+                    <Field>
+                        <FieldLabel>@L["PriceRange"]</FieldLabel>
+                        <NumericEdit TValue="float" @bind-Value="NewEntity.PriceRange"/>
+                    </Field>
+                    <Field>
+                        <FieldLabel>@L["State"]</FieldLabel>
+                        <Select TValue="OrderState" @bind-SelectedValue="@NewEntity.State" ReadOnly="@CanManage">
+                            @foreach (int orderStateValue in Enum.GetValues(typeof(OrderState)))
+                            {
+                                <SelectItem TValue="OrderState" Value="@((OrderState) orderStateValue)">
+                                    @L[$"Enum:OrderState.{Enum.GetName((OrderState)orderStateValue)}"]
+                                </SelectItem>
+                            }
+                        </Select>
+                    </Field>
+                </Validations>
+            </ModalBody>
+            <ModalFooter>
+                <Button Color="Color.Secondary"
+                        Clicked="CloseCreateModalAsync">@L["Cancel"]</Button>
+                <Button Color="Color.Primary"
+                        Type="@ButtonType.Submit"
+                        PreventDefaultOnSubmit="true"
+                        Clicked="CreateEntityAsync">@L["Save"]</Button>
+            </ModalFooter>
+        </Form>
+    </ModalContent>
+</Modal>
+
+<Modal @ref="@EditModal">
+    <ModalBackdrop />
+    <ModalContent IsCentered="true">
+        <Form>
+            <ModalHeader>
+                <ModalTitle>@EditingEntity.Name</ModalTitle>
+                <CloseButton Clicked="CloseEditModalAsync"/>
+            </ModalHeader>
+            <ModalBody>
+                <Validations @ref="@EditValidationsRef" Model="@NewEntity" ValidateOnLoad="false">
+                    <Validation MessageLocalizer="@LH.Localize">
+                        <Field>
+                            <FieldLabel>@L["Name"]</FieldLabel>
+                            <TextEdit @bind-Text="@EditingEntity.Name">
+                                <Feedback>
+                                    <ValidationError/>
+                                </Feedback>
+                            </TextEdit>
+                        </Field>
+                    </Validation>
+                    <Field>
+                        <FieldLabel>@L["Type"]</FieldLabel>
+                        <Select TValue="ItemType" @bind-SelectedValue="@EditingEntity.Type">
+                            @foreach (int itemTypeValue in Enum.GetValues(typeof(ItemType)))
+                            {
+                                <SelectItem TValue="ItemType" Value="@((ItemType) itemTypeValue)">
+                                    @L[$"Enum:ItemType.{Enum.GetName((ItemType)itemTypeValue)}"]
+                                </SelectItem>
+                            }
+                        </Select>
+                    </Field>
+                    <Field>
+                        <FieldLabel>@L["DueDate"]</FieldLabel>
+                        <DateEdit TValue="DateTime" @bind-Date="EditingEntity.DueDate"/>
+                    </Field>
+                    <Field>
+                        <FieldLabel>@L["PriceRange"]</FieldLabel>
+                        <NumericEdit TValue="float" @bind-Value="EditingEntity.PriceRange"/>
+                    </Field>
+                    <Field>
+                            <FieldLabel>@L["State"]</FieldLabel>
+                            <Select TValue="OrderState" @bind-SelectedValue="@EditingEntity.State" ReadOnly="@CanManage">
+                                @foreach (int orderStateValue in Enum.GetValues(typeof(OrderState)))
+                                {
+                                    <SelectItem TValue="OrderState" Value="@((OrderState) orderStateValue)">
+                                        @L[$"Enum:OrderState.{Enum.GetName((OrderState)orderStateValue)}"]
+                                    </SelectItem>
+                                }
+                            </Select>
+                        </Field>
+                </Validations>
+            </ModalBody>
+            <ModalFooter>
+                <Button Color="Color.Secondary"
+                        Clicked="CloseEditModalAsync">@L["Cancel"]</Button>
+                <Button Color="Color.Primary"
+                        Type="@ButtonType.Submit"
+                        PreventDefaultOnSubmit="true"
+                        Clicked="UpdateEntityAsync">@L["Save"]</Button>
+            </ModalFooter>
+        </Form>
+    </ModalContent>
+</Modal>
+
+@code {
+    bool CanManage = false;
+    bool CanCreate = false;
+    bool CanEdit = false;
+    bool CanDelete = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        CanManage = !(await AuthorizationService.IsGrantedAsync(ItemOrderPermissions.Items.Manage));
+        CanCreate = await AuthorizationService.IsGrantedAsync(ItemOrderPermissions.Items.Create);
+        CanEdit = await AuthorizationService.IsGrantedAsync(ItemOrderPermissions.Items.Edit);
+        CanDelete = await AuthorizationService.IsGrantedAsync(ItemOrderPermissions.Items.Delete);
+
+        StateHasChanged();
+    }
+}
